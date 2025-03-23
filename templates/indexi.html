@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+  <meta charset="UTF-8">
+  <title>coredii</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+    }
+    /* Arxa plan üçün canvas */
+    #bgCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    /* 3D logo konteyneri – mərkəzdə yerləşir */
+    #logoContainer {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 800px;
+      height: 400px;
+      z-index: 2;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Hərəkətli arxa plan üçün canvas -->
+  <canvas id="bgCanvas"></canvas>
+  <!-- 3D logo üçün konteyner -->
+  <div id="logoContainer"></div>
+
+  <!-- Three.js kitabxanası və əlavə modullar -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/FontLoader.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/geometries/TextGeometry.js"></script>
+
+  <script>
+    /********* ARXA PLAN: Hərəkətli Zərəciklər və Gradient *********/
+    const bgCanvas = document.getElementById('bgCanvas');
+    const bgCtx = bgCanvas.getContext('2d');
+    bgCanvas.width = window.innerWidth;
+    bgCanvas.height = window.innerHeight;
+
+    // Zərəcik obyektləri üçün sinif
+    class Particle {
+      constructor() {
+        this.x = Math.random() * bgCanvas.width;
+        this.y = Math.random() * bgCanvas.height;
+        this.radius = Math.random() * 2 + 1;
+        this.speedX = (Math.random() - 0.5) * 1.5;
+        this.speedY = (Math.random() - 0.5) * 1.5;
+        this.alpha = Math.random() * 0.5 + 0.5;
+      }
+      update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        if (this.x < 0 || this.x > bgCanvas.width) this.speedX *= -1;
+        if (this.y < 0 || this.y > bgCanvas.height) this.speedY *= -1;
+      }
+      draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255,' + this.alpha + ')';
+        ctx.fill();
+      }
+    }
+
+    let particles = [];
+    const particleCount = 150;
+    for (let i = 0; i < particleCount; i++) {
+      particles.push(new Particle());
+    }
+
+    function animateBG() {
+      // Arxa plan üçün gradient
+      let gradient = bgCtx.createLinearGradient(0, 0, bgCanvas.width, bgCanvas.height);
+      gradient.addColorStop(0, '#0d0d0d');
+      gradient.addColorStop(1, '#1a1a1a');
+      bgCtx.fillStyle = gradient;
+      bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+      // Zərəcikləri yeniləyirik və çəkirik
+      particles.forEach(p => {
+        p.update();
+        p.draw(bgCtx);
+      });
+      requestAnimationFrame(animateBG);
+    }
+    animateBG();
+
+    window.addEventListener('resize', () => {
+      bgCanvas.width = window.innerWidth;
+      bgCanvas.height = window.innerHeight;
+    });
+
+    /********* THREE.JS İLƏ 4D EFEKTİ: "COREDII" LOGO *********/
+    let scene, camera, renderer, textMesh, uniforms;
+    const logoContainer = document.getElementById('logoContainer');
+
+    function initThree() {
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(45, logoContainer.clientWidth / logoContainer.clientHeight, 0.1, 1000);
+      camera.position.z = 80;
+      renderer = new THREE.WebGLRenderer({alpha: true, antialias: true});
+      renderer.setSize(logoContainer.clientWidth, logoContainer.clientHeight);
+      logoContainer.appendChild(renderer.domElement);
+
+      // İşıqlandırma
+      scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      dirLight.position.set(0, 1, 1);
+      scene.add(dirLight);
+
+      // Uniform dəyişənləri: zaman daxil olmaqla
+      uniforms = {
+        time: { value: 0.0 }
+      };
+
+      // Xüsusi shader materialı: Vertex shader dalğalandırır
+      const shaderMaterial = new THREE.ShaderMaterial({
+        uniforms: uniforms,
+        vertexShader: `
+          uniform float time;
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            vec3 pos = position;
+            // Dalğalandırma effekti: Y-oxu boyunca və təsadüfi təsir
+            pos += normal * sin(time + pos.y * 0.2) * 2.0;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+          }
+        `,
+        fragmentShader: `
+          varying vec2 vUv;
+          void main() {
+            // Parlaq, metalik effekt üçün rəng
+            gl_FragColor = vec4(1.0, 0.5, 0.0, 1.0);
+          }
+        `,
+        side: THREE.DoubleSide,
+        shininess: 100
+      });
+
+      // 3D mətn yaratmaq üçün FontLoader
+      const loader = new THREE.FontLoader();
+      loader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', function(font) {
+        const geometry = new THREE.TextGeometry('coredii', {
+          font: font,
+          size: 12,
+          height: 4,
+          curveSegments: 32,
+          bevelEnabled: true,
+          bevelThickness: 1,
+          bevelSize: 0.5,
+          bevelOffset: 0,
+          bevelSegments: 8
+        });
+        geometry.center();
+        textMesh = new THREE.Mesh(geometry, shaderMaterial);
+        scene.add(textMesh);
+        animateThree();
+      });
+    }
+
+    function animateThree() {
+      requestAnimationFrame(animateThree);
+      if (textMesh) {
+        // Ənənəvi fırlanma yerinə burada yalnız zaman uniform-u yenilənir ki, shader animasiyası işə düşsün
+        uniforms.time.value += 0.02;
+      }
+      renderer.render(scene, camera);
+    }
+
+    initThree();
+
+    window.addEventListener('resize', () => {
+      if (renderer && camera) {
+        camera.aspect = logoContainer.clientWidth / logoContainer.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(logoContainer.clientWidth, logoContainer.clientHeight);
+      }
+    });
+  </script>
+</body>
+</html>
